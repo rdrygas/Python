@@ -4,7 +4,7 @@ from faster_whisper import WhisperModel
 from pathlib import Path
 
 AUDIO = Path("/home/robert/nagranie.mp3")  # ścieżka do pliku audio (mp3, wav, flac, m4a, itp.)
-MODEL_NAME = "turbo"   # "turbo" albo "large-v3"
+MODEL_NAME = "turbo"   # "turbo" albo "large-v
 COMPUTE_TYPE = "float16"   # przy braku VRAM: "int8_float16"
 
 # Funkcja do formatowania timestampów w formacie SRT

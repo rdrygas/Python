@@ -1,4 +1,5 @@
 # Prosty przykład transkrypcji z użyciem faster-whisper
+# https://github.com/SYSTRAN/faster-whisper?tab=readme-ov-file#usage
 
 from faster_whisper import WhisperModel
 from pathlib import Path

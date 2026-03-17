@@ -1,14 +1,30 @@
-# Transkrypcja pliku audio lub wideo
+#        NAME: Transkrypcja pliku audio lub wideo
+# DESCRIPTION: Skrypt używa modelu faster-whisper do transkrypcji pliku audio lub wideo, a następnie zapisuje wyniki w formacie TXT i SRT. 
+#              Skrypt jest zoptymalizowany pod kątem czytelności napisów, dzieląc tekst na bloki z uwzględnieniem długości, czasu trwania i interpunkcji. 
+#              Pasek postępu tqdm pokazuje postęp transkrypcji w czasie rzeczywistym.
+#      AUTHOR: Robert Drygas / ChatGPT
+#     VERSION: 1.0.0
+#     CREATED: 2026-03-14
+#    MODIFIED: 2026-03-17
 #
-# Skrypt używa modelu faster-whisper do transkrypcji pliku audio lub wideo, a następnie zapisuje wyniki w formacie TXT i SRT. 
-# Skrypt jest zoptymalizowany pod kątem czytelności napisów, dzieląc tekst na bloki z uwzględnieniem długości, czasu trwania i interpunkcji. 
-# Pasek postępu tqdm pokazuje postęp transkrypcji w czasie rzeczywistym.
-# 
-# Argumenty:
-# - audio_file: Ścieżka do pliku audio lub wideo, np. nagranie.mp3 albo film.mp4
-# 
-# Wersja:
-# 1.0 - Pierwsza wersja.
+# DEPENDENCIES:
+#
+# USAGE:
+# $ python3 transcribe.py <filename>
+#
+# ARGUMENTS:
+# <filename> - ścieżka do pliku audio lub wideo
+#
+# EXAMPLES:
+# $ python3 transcribe.py nagranie.mp3
+# $ python3 transcribe.py nagranie.mkv
+#
+# CHANGELOG:
+# - 1.0.0 (2026-03-14) Pierwsza wersja
+#
+# ROADMAP:
+# - [ ] Style napisów
+
 
 
 from __future__ import annotations

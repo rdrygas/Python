@@ -9,21 +9,24 @@
 #
 # DEPENDENCIES:
 #
+# TESTED ON:
+#     - OS Windows 11 + WSL2 (Ubuntu 24.04, Python 3.14) + GPU NVIDIA GeForce RTX 3060 + CPU Intel Core i7 11700
+#
 # USAGE:
-# $ python3 transcribe.py <filename>
+#     $ python3 transcribe.py <filename>
 #
 # ARGUMENTS:
-# <filename> - ścieżka do pliku audio lub wideo (obowiązkowe)
+#     <filename> - ścieżka do pliku audio lub wideo (obowiązkowe)
 #
 # EXAMPLES:
-# $ python3 transcribe.py nagranie.mp3
-# $ python3 transcribe.py nagranie.mkv
+#     $ python3 transcribe.py nagranie.mp3
+#     $ python3 transcribe.py nagranie.mkv
 #
 # CHANGELOG:
-# - 1.0.0 (2026-03-14) Pierwsza wersja
+#     - 1.0.0 (2026-03-14) Pierwsza wersja
 #
 # ROADMAP:
-# - [ ] Style napisów
+#     - [ ] Style napisów
 
 
 from __future__ import annotations

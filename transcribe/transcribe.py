@@ -29,6 +29,8 @@
 #    - [ ] Style napisów
 #    - [ ] Komunikaty etapów wykonywania skryptu
 #    - [ ] Wykrywanie cache modelu
+#
+# LICENSE: MIT License
 
 
 from __future__ import annotations

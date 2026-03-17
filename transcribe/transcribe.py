@@ -13,7 +13,7 @@
 # $ python3 transcribe.py <filename>
 #
 # ARGUMENTS:
-# <filename> - ścieżka do pliku audio lub wideo
+# <filename> - ścieżka do pliku audio lub wideo (obowiązkowe)
 #
 # EXAMPLES:
 # $ python3 transcribe.py nagranie.mp3
@@ -24,7 +24,6 @@
 #
 # ROADMAP:
 # - [ ] Style napisów
-
 
 
 from __future__ import annotations

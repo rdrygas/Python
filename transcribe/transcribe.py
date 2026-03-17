@@ -31,7 +31,7 @@
 #    - [ ] Wykrywanie cache modelu
 #    - [ ] Połączenie napisów z nagraniem wideo MKV
 #
-# LICENSE: MIT License
+# LICENSE: GPL-3.0
 
 
 from __future__ import annotations

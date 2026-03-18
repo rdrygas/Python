@@ -29,6 +29,7 @@
 #    - [ ] Style napisów
 #    - [ ] Komunikaty etapów wykonywania skryptu
 #    - [ ] Wykrywanie cache modelu
+#    - [ ] Połączenie napisów z nagraniem wideo MKV
 #
 # LICENSE: MIT License
 

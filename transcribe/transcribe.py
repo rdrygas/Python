@@ -52,7 +52,7 @@ from tqdm import tqdm
 # KONFIGURACJA MODELU
 MODEL_NAME = "turbo"          # Wybór modelu: "turbo" (szybki), "large-v3" (dokładniejszy)
 COMPUTE_TYPE = "float16"      # Typ obliczeń. Dla starszych kart lub CPU zmień na "int8_float16" lub "int8"
-LANGUAGE = "pl"               # Kod języka (ISO). None = automatyczna detekcja
+LANGUAGE = "pl"               # Kod języka (ISO 639-1). None = automatyczna detekcja
 BEAM_SIZE = 5                 # Szerokość poszukiwania (wyższa = lepsza dokładność, ale wolniej)
 VAD_FILTER = True             # Voice Activity Detection - pomija ciszę, zmniejsza halucynacje modelu
 VAD_PARAMETERS = {"min_silence_duration_ms": 3000}  # Parametry wykrywania ciszy (w tym przypadku: minimum 3 sekundy ciszy, aby rozdzielić napisy)
@@ -162,14 +162,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "audio_file",
         type=Path,
-        help="Path to the audio or video file, e.g., recording.mp3 or movie.mp4",
+        help="Path to the audio or video file, e.g., recording.mp3 or movie.mp4.",
     )
     parser.add_argument(
         "-s", "--style",
         choices=sorted(STYLE_PRESETS.keys()),
         default="reading",
-        help="Subtitle style: 'reading' gives longer, more comfortable blocks, while 'film' creates shorter, more classic SRT. Default is 'reading'.",
+        help="Subtitle style: 'reading' gives longer, more comfortable blocks, while 'film' creates shorter, more classic SRT (default: 'reading').",
     )
+    parser.add_argument(
+        "-l", "--language",
+        type=str,
+        default="pl",
+        help="Language of the audio for transcription (ISO 639-1 code) or None for automatic detection (default: 'pl')."
+    )
+
     return parser.parse_args()
 
 
@@ -512,6 +519,31 @@ def collect_words_and_metadata(
     return all_words, info
 
 
+def set_language(lang_code: str | None) -> str | None:
+    """Ustawia globalną zmienną LANGUAGE na podstawie argumentu wiersza poleceń."""
+    global LANGUAGE
+
+    normalized = lang_code.strip() if lang_code is not None else None
+
+    # Akceptujemy: None (autodetekcja) albo dwuznakowy kod ISO 639-1.
+    if normalized is None or normalized.lower() == "none":
+        LANGUAGE = None
+    elif len(normalized) == 2 and normalized.isalpha():
+        LANGUAGE = normalized.lower()
+    else:
+        raise SystemExit(
+            "Error: language code should be None or a 2-letter ISO 639-1 code, "
+            f"got '{lang_code}'"
+        )
+
+    if LANGUAGE is None:
+        print("Language set to automatic detection (None). The model will try to detect the language of the audio.")
+    else:
+        print(f"Language set to: {LANGUAGE}")
+
+    return LANGUAGE
+
+
 def main() -> None:
     """Główny punkt wejścia skryptu."""
     args = parse_args()
@@ -530,6 +562,7 @@ def main() -> None:
         f"max_block_duration={preset.max_block_duration:.1f}s, "
         f"max_join_gap={preset.max_join_gap:.2f}s"
     )
+    set_language(args.language)
     if total_duration:
         print(f"File duration: {total_duration:.1f} s")
     else:

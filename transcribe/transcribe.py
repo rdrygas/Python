@@ -146,18 +146,18 @@ def apply_style_preset(style_name: str) -> StylePreset:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Transkrypcja pliku audio/wideo do TXT i SRT z paskiem postępu tqdm, timestampami słów i inteligentnym formatowaniem napisów.",
+        description="Transcription of audio/video files to TXT and SRT formats, featuring a progress bar, word timestamps and intelligent subtitle formatting.",
     )
     parser.add_argument(
         "audio_file",
         type=Path,
-        help="Ścieżka do pliku audio lub wideo, np. nagranie.mp3 albo film.mp4",
+        help="Path to the audio or video file, e.g., recording.mp3 or movie.mp4",
     )
     parser.add_argument(
-        "--style",
+        "-s", "--style",
         choices=sorted(STYLE_PRESETS.keys()),
         default="reading",
-        help="Styl napisów: 'reading' daje dłuższe, wygodniejsze bloki, a 'film' tworzy krótsze, bardziej klasyczne SRT.",
+        help="Subtitle style: 'reading' gives longer, more comfortable blocks, while 'film' creates shorter, more classic SRT. Default is 'reading'.",
     )
     return parser.parse_args()
 
@@ -193,7 +193,7 @@ def get_media_duration_seconds(path: Path) -> float | None:
 
 def create_progress_bar(total_duration: float | None) -> tqdm:
     common_kwargs = {
-        "desc": "Transkrypcja",
+        "desc": "Transcribing",
         "dynamic_ncols": True,
         "leave": True,
     }
@@ -460,21 +460,21 @@ def main() -> None:
     preset = apply_style_preset(args.style)
 
     if not audio.exists():
-        raise SystemExit(f"Błąd: plik nie istnieje: {audio}")
+        raise SystemExit(f"Error: file does not exist: {audio}")
 
     total_duration = get_media_duration_seconds(audio)
-    print(f"Plik: {audio}")
-    print(f"Styl napisów: {args.style}")
+    print(f"File: {audio}")
+    print(f"Subtitle style: {args.style}")
     print(
-        "Parametry stylu: "
+        "Style parameters: "
         f"max_line_length={preset.max_line_length}, "
         f"max_block_duration={preset.max_block_duration:.1f}s, "
         f"max_join_gap={preset.max_join_gap:.2f}s"
     )
     if total_duration:
-        print(f"Długość pliku: {total_duration:.1f} s")
+        print(f"File duration: {total_duration:.1f} s")
     else:
-        print("Nie udało się odczytać długości pliku. Pasek będzie liczony po segmentach.")
+        print("Failed to read file duration. Progress bar will be based on segments.")
 
     model = WhisperModel(MODEL_NAME, device="cuda", compute_type=COMPUTE_TYPE)
 
@@ -492,7 +492,7 @@ def main() -> None:
         words, _ = collect_words_and_metadata(segments, total_duration, pbar)
 
     if not words:
-        raise SystemExit("Błąd: model nie zwrócił żadnych słów do zapisania.")
+        raise SystemExit("Error: model did not return any words to save.")
 
     subtitle_blocks = build_subtitle_blocks(words)
 
@@ -507,9 +507,9 @@ def main() -> None:
             srt_f.write(f"{srt_timestamp(block.start)} --> {srt_timestamp(block.end)}\n")
             srt_f.write(block.text_for_srt + "\n\n")
 
-    print(f"Język: {info.language} (p={info.language_probability:.3f})")
-    print(f"Liczba słów: {len(words)}")
-    print(f"Liczba napisów po scaleniu: {len(subtitle_blocks)}")
+    print(f"Language: {info.language} (p={info.language_probability:.3f})")
+    print(f"Number of words: {len(words)}")
+    print(f"Number of merged subtitles: {len(subtitle_blocks)}")
     print(f"TXT: {txt_path}")
     print(f"SRT: {srt_path}")
 

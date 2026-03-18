@@ -3,7 +3,7 @@
 #              Skrypt jest zoptymalizowany pod kątem czytelności napisów, dzieląc tekst na bloki z uwzględnieniem długości, czasu trwania i interpunkcji. 
 #              Pasek postępu tqdm pokazuje postęp transkrypcji w czasie rzeczywistym.
 #      AUTHOR: Robert Drygas / ChatGPT
-#     VERSION: 1.0.0
+#     VERSION: 1.1.0
 #     CREATED: 2026-03-14
 #    MODIFIED: 2026-03-17
 #
@@ -13,20 +13,23 @@
 #    - OS Windows 11 + WSL2 (Ubuntu 24.04, Python 3.14) + GPU NVIDIA GeForce RTX 3060 + CPU Intel Core i7 11700
 #
 # USAGE:
-#    $ python3 transcribe.py <filename>
+#    $ python3 transcribe.py <filename> [--style <style>]
 #
 # ARGUMENTS:
 #    <filename> - ścieżka do pliku audio lub wideo (obowiązkowe)
+#    --style    - styl napisów: 'reading' daje dłuższe, wygodniejsze bloki, a 'film' tworzy krótsze, bardziej klasyczne SRT (opcjonalne, domyślnie 'reading')
 #
 # EXAMPLES:
 #    $ python3 transcribe.py nagranie.mp3
 #    $ python3 transcribe.py nagranie.mkv
+#    $ python3 transcribe.py nagranie.mp4 --style film
 #
 # CHANGELOG:
 #    - 1.0.0 (2026-03-14) Pierwsza wersja
+#    - 1.1.0 (2026-03-17) Dodano style napisów
 #
 # ROADMAP:
-#    - [ ] Style napisów
+#    - [*] Style napisów
 #    - [ ] Komunikaty etapów wykonywania skryptu
 #    - [ ] Wykrywanie cache modelu
 #    - [ ] Połączenie napisów z nagraniem wideo MKV
@@ -52,7 +55,7 @@ VAD_FILTER = True
 VAD_PARAMETERS = {"min_silence_duration_ms": 3000}
 CONDITION_ON_PREVIOUS_TEXT = False
 
-# Parametry formatowania napisów
+# Parametry formatowania napisów - będą nadpisywane przez preset stylu
 MAX_LINE_LENGTH = 42            # maks. liczba znaków w jednej linii
 MAX_LINES = 2                   # maks. liczba linii w jednym napisie
 MAX_BLOCK_CHARS = MAX_LINE_LENGTH * MAX_LINES
@@ -64,6 +67,35 @@ MAX_JOIN_GAP = 1.0              # maks. przerwa między blokami, by je scalić
 STRONG_PUNCT = ".?!"
 SOFT_PUNCT = ",;:)]}"
 
+
+@dataclass(frozen=True, slots=True)
+class StylePreset:
+    max_line_length: int
+    max_lines: int
+    max_block_duration: float
+    min_block_chars: int
+    min_block_duration: float
+    max_join_gap: float
+
+
+STYLE_PRESETS = {
+    "reading": StylePreset(
+        max_line_length=42,
+        max_lines=2,
+        max_block_duration=6.0,
+        min_block_chars=18,
+        min_block_duration=1.2,
+        max_join_gap=1.0,
+    ),
+    "film": StylePreset(
+        max_line_length=36,
+        max_lines=2,
+        max_block_duration=4.5,
+        min_block_chars=10,
+        min_block_duration=0.9,
+        max_join_gap=0.55,
+    ),
+}
 
 @dataclass(slots=True)
 class WordToken:
@@ -97,17 +129,35 @@ class SubtitleBlock:
         return wrap_block_text(self.words)
 
 
+def apply_style_preset(style_name: str) -> StylePreset:
+    global MAX_LINE_LENGTH, MAX_LINES, MAX_BLOCK_CHARS
+    global MAX_BLOCK_DURATION, MIN_BLOCK_CHARS, MIN_BLOCK_DURATION, MAX_JOIN_GAP
+
+    preset = STYLE_PRESETS[style_name]
+    MAX_LINE_LENGTH = preset.max_line_length
+    MAX_LINES = preset.max_lines
+    MAX_BLOCK_CHARS = MAX_LINE_LENGTH * MAX_LINES
+    MAX_BLOCK_DURATION = preset.max_block_duration
+    MIN_BLOCK_CHARS = preset.min_block_chars
+    MIN_BLOCK_DURATION = preset.min_block_duration
+    MAX_JOIN_GAP = preset.max_join_gap
+    return preset
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description=(
-            "Transkrypcja pliku audio/wideo do TXT i SRT z paskiem postępu tqdm, "
-            "timestampami słów i inteligentnym formatowaniem napisów."
-        ),
+        description="Transkrypcja pliku audio/wideo do TXT i SRT z paskiem postępu tqdm, timestampami słów i inteligentnym formatowaniem napisów.",
     )
     parser.add_argument(
         "audio_file",
         type=Path,
         help="Ścieżka do pliku audio lub wideo, np. nagranie.mp3 albo film.mp4",
+    )
+    parser.add_argument(
+        "--style",
+        choices=sorted(STYLE_PRESETS.keys()),
+        default="reading",
+        help="Styl napisów: 'reading' daje dłuższe, wygodniejsze bloki, a 'film' tworzy krótsze, bardziej klasyczne SRT.",
     )
     return parser.parse_args()
 
@@ -195,7 +245,8 @@ def should_break_after(current_words: list[WordToken], next_word: WordToken | No
     if ends_with_punctuation(current_text, STRONG_PUNCT):
         return True
 
-    if ends_with_punctuation(current_text, SOFT_PUNCT) and len(current_text) >= int(MAX_BLOCK_CHARS * 0.55):
+    punct_threshold = 0.45 if MAX_LINE_LENGTH <= 36 else 0.55
+    if ends_with_punctuation(current_text, SOFT_PUNCT) and len(current_text) >= int(MAX_BLOCK_CHARS * punct_threshold):
         return True
 
     return False
@@ -211,7 +262,7 @@ def words_to_initial_blocks(words: list[WordToken]) -> list[SubtitleBlock]:
     for index, word in enumerate(words):
         if current:
             gap_before = max(0.0, word.start - current[-1].end)
-            if gap_before >= MAX_JOIN_GAP and current:
+            if gap_before >= MAX_JOIN_GAP:
                 blocks.append(SubtitleBlock(words=current))
                 current = []
 
@@ -406,12 +457,20 @@ def collect_words_and_metadata(
 def main() -> None:
     args = parse_args()
     audio = args.audio_file.expanduser().resolve()
+    preset = apply_style_preset(args.style)
 
     if not audio.exists():
         raise SystemExit(f"Błąd: plik nie istnieje: {audio}")
 
     total_duration = get_media_duration_seconds(audio)
     print(f"Plik: {audio}")
+    print(f"Styl napisów: {args.style}")
+    print(
+        "Parametry stylu: "
+        f"max_line_length={preset.max_line_length}, "
+        f"max_block_duration={preset.max_block_duration:.1f}s, "
+        f"max_join_gap={preset.max_join_gap:.2f}s"
+    )
     if total_duration:
         print(f"Długość pliku: {total_duration:.1f} s")
     else:

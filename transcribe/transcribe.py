@@ -13,27 +13,34 @@
 #    - OS Windows 11 + WSL2 (Ubuntu 24.04, Python 3.14) + GPU NVIDIA GeForce RTX 3060 + CPU Intel Core i7 11700
 #
 # USAGE:
-#    $ python3 transcribe.py <filename> [--style <style>]
+#    $ python3 transcribe.py <filename> [--style <style>] [--language <lang_code>]
 #
 # ARGUMENTS:
 #    <filename> - ścieżka do pliku audio lub wideo (obowiązkowe)
 #    --style    - styl napisów: 'reading' daje dłuższe, wygodniejsze bloki, a 'film' tworzy krótsze, bardziej klasyczne SRT (opcjonalne, domyślnie 'reading')
+#    --language - kod języka (ISO 639-1), np. 'pl' dla polskiego, 'en' dla angielskiego lub None dla automatycznej detekcji (opcjonalne, domyślnie 'pl')
 #
 # EXAMPLES:
 #    $ python3 transcribe.py nagranie.mp3
 #    $ python3 transcribe.py nagranie.mkv
 #    $ python3 transcribe.py nagranie.mp4 --style film
+#    $ python3 transcribe.py nagranie.mp4 --language en
+#    $ python3 transcribe.py nagranie.mp4 --style film --language en
 #
 # CHANGELOG:
 #    - 1.0.0 (2026-03-14) Pierwsza wersja
 #    - 1.1.0 (2026-03-17) Dodano style napisów
 #    - 1.1.1 (2026-03-18) Dodano komentarze i poprawki w dokumentacji
+#    - 1.2.0 (2026-03-18) Dodano obsługę argumentu języka transkrypcji
+#    - 1.2.1 (2026-03-18) Dodano obsługę przerwania klawiaturą (Ctrl+C) i poprawki w komunikatach o błędach
 #
 # ROADMAP:
 #    - [*] Style napisów
 #    - [ ] Komunikaty etapów wykonywania skryptu
 #    - [ ] Wykrywanie cache modelu
 #    - [ ] Połączenie napisów z nagraniem wideo MKV
+#
+# KNOWN ISSUES:
 #
 # LICENSE: GPL-3.0
 
@@ -608,7 +615,7 @@ def main() -> None:
             srt_f.write(block.text_for_srt + "\n\n")
 
     # Podsumowanie
-    print(f"Language: {info.language} (p={info.language_probability:.3f})")
+    print(f"Language: {info.language} (probability={info.language_probability:.3f})")
     print(f"Number of words: {len(words)}")
     print(f"Number of merged subtitles: {len(subtitle_blocks)}")
     print(f"TXT: {txt_path}")

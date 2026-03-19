@@ -114,6 +114,7 @@ STYLE_PRESETS = {
     ),
 }
 
+# Wspierane modele faster-whisper
 VALID_MODEL_NAMES = {
     "tiny.en",
     "tiny",

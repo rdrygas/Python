@@ -3,9 +3,9 @@
 #              Skrypt jest zoptymalizowany pod kątem czytelności napisów, dzieląc tekst na bloki z uwzględnieniem długości, czasu trwania i interpunkcji. 
 #              Pasek postępu tqdm pokazuje postęp transkrypcji w czasie rzeczywistym.
 #      AUTHOR: Robert Drygas / ChatGPT
-#     VERSION: 1.1.1
+#     VERSION: 1.3.0
 #     CREATED: 2026-03-14
-#    MODIFIED: 2026-03-18
+#    MODIFIED: 2026-03-19
 #
 # DEPENDENCIES:
 #
@@ -33,10 +33,11 @@
 #    - 1.1.1 (2026-03-18) Dodano komentarze i poprawki w dokumentacji
 #    - 1.2.0 (2026-03-18) Dodano obsługę argumentu języka transkrypcji
 #    - 1.2.1 (2026-03-18) Dodano obsługę przerwania klawiaturą (Ctrl+C) i poprawki w komunikatach o błędach
+#    - 1.3.0 (2026-03-19) Dodano komunikaty etapów wykonywania skryptu (funkcja stage)
 #
 # ROADMAP:
 #    - [*] Style napisów
-#    - [ ] Komunikaty etapów wykonywania skryptu
+#    - [*] Komunikaty etapów wykonywania skryptu
 #    - [ ] Wykrywanie cache modelu
 #    - [ ] Połączenie napisów z nagraniem wideo MKV
 #
@@ -186,6 +187,10 @@ def parse_args() -> argparse.Namespace:
     )
 
     return parser.parse_args()
+
+
+def stage(message: str) -> None:
+    print(f"[STAGE] {message}", flush=True)
 
 
 def srt_timestamp(seconds: float) -> str:
@@ -561,7 +566,6 @@ def main() -> None:
     if not audio.exists():
         raise SystemExit(f"Error: file does not exist: {audio}")
 
-    total_duration = get_media_duration_seconds(audio)
     print(f"File: {audio}")
     print(f"Subtitle style: {args.style}")
     print(
@@ -570,17 +574,23 @@ def main() -> None:
         f"max_block_duration={preset.max_block_duration:.1f}s, "
         f"max_join_gap={preset.max_join_gap:.2f}s"
     )
-    set_language(args.language)
+    
+    total_duration = get_media_duration_seconds(audio)
     if total_duration:
         print(f"File duration: {total_duration:.1f} s")
     else:
         print("Failed to read file duration. Progress bar will be based on segments.")
+    
+    set_language(args.language)
 
     # Inicjalizacja modelu AI
     # Uwaga: Za pierwszym razem pobierze model z HuggingFace (ok. 1.5GB - 3GB)
+    stage("Loading Whisper model")
     model = WhisperModel(MODEL_NAME, device="cuda", compute_type=COMPUTE_TYPE)
+    stage("Whisper model loaded")
 
     # Uruchomienie transkrypcji (generator)
+    stage("Starting transcription")
     segments, info = model.transcribe(
         str(audio),
         language=LANGUAGE,
@@ -602,6 +612,7 @@ def main() -> None:
     subtitle_blocks = build_subtitle_blocks(words)
 
     # Zapis do plików
+    stage("Saving subtitles to TXT and SRT")
     txt_path = audio.with_suffix(".txt")
     srt_path = audio.with_suffix(".srt")
 
@@ -615,6 +626,7 @@ def main() -> None:
             srt_f.write(block.text_for_srt + "\n\n")
 
     # Podsumowanie
+    stage("Transcription completed")
     print(f"Language: {info.language} (probability={info.language_probability:.3f})")
     print(f"Number of words: {len(words)}")
     print(f"Number of merged subtitles: {len(subtitle_blocks)}")

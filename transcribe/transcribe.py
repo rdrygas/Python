@@ -3,7 +3,7 @@
 #              Skrypt jest zoptymalizowany pod kątem czytelności napisów, dzieląc tekst na bloki z uwzględnieniem długości, czasu trwania i interpunkcji. 
 #              Pasek postępu tqdm pokazuje postęp transkrypcji w czasie rzeczywistym.
 #      AUTHOR: Robert Drygas / ChatGPT
-#     VERSION: 1.3.0
+#     VERSION: 1.4.0
 #     CREATED: 2026-03-14
 #    MODIFIED: 2026-03-19
 #
@@ -34,11 +34,12 @@
 #    - 1.2.0 (2026-03-18) Dodano obsługę argumentu języka transkrypcji
 #    - 1.2.1 (2026-03-18) Dodano obsługę przerwania klawiaturą (Ctrl+C) i poprawki w komunikatach o błędach
 #    - 1.3.0 (2026-03-19) Dodano komunikaty etapów wykonywania skryptu (funkcja stage)
+#    - 1.4.0 (2026-03-19) Dodano wykrywanie cache modelu i komunikaty o jego statusie
 #
 # ROADMAP:
 #    - [*] Style napisów
 #    - [*] Komunikaty etapów wykonywania skryptu
-#    - [ ] Wykrywanie cache modelu
+#    - [*] Wykrywanie cache modelu
 #    - [ ] Połączenie napisów z nagraniem wideo MKV
 #
 # KNOWN ISSUES:
@@ -50,6 +51,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -59,7 +61,7 @@ from tqdm import tqdm
 
 
 # KONFIGURACJA MODELU
-MODEL_NAME = "turbo"          # Wybór modelu: "turbo" (szybki), "large-v3" (dokładniejszy)
+MODEL_NAME = "large-v3"          # Wybór modelu: "turbo" (szybki), "large-v3" (dokładniejszy)
 COMPUTE_TYPE = "float16"      # Typ obliczeń. Dla starszych kart lub CPU zmień na "int8_float16" lub "int8"
 LANGUAGE = "pl"               # Kod języka (ISO 639-1). None = automatyczna detekcja
 BEAM_SIZE = 5                 # Szerokość poszukiwania (wyższa = lepsza dokładność, ale wolniej)
@@ -191,6 +193,42 @@ def parse_args() -> argparse.Namespace:
 
 def stage(message: str) -> None:
     print(f"[STAGE] {message}", flush=True)
+
+
+def get_hf_cache_root() -> Path:
+    """Zwraca ścieżkę do katalogu cache HuggingFace, uwzględniając różne możliwe zmienne środowiskowe i standardowe lokalizacje."""
+    if os.environ.get("HF_HUB_CACHE"):
+        return Path(os.environ["HF_HUB_CACHE"]).expanduser()
+    if os.environ.get("HUGGINGFACE_HUB_CACHE"):
+        return Path(os.environ["HUGGINGFACE_HUB_CACHE"]).expanduser()
+    if os.environ.get("HF_HOME"):
+        return Path(os.environ["HF_HOME"]).expanduser() / "hub"
+    if os.environ.get("XDG_CACHE_HOME"):
+        return Path(os.environ["XDG_CACHE_HOME"]).expanduser() / "huggingface" / "hub"
+    return Path.home() / ".cache" / "huggingface" / "hub"
+
+
+def detect_model_cache(model_name: str) -> tuple[bool, Path | None]:
+    """Sprawdza, czy model jest już pobrany w lokalnym cache HuggingFace. Zwraca krotkę (znaleziono, ścieżka)."""
+    if Path(model_name).exists():
+        return True, Path(model_name)
+
+    cache_root = get_hf_cache_root()
+    if not cache_root.exists():
+        return False, cache_root
+
+    normalized = model_name.lower().replace("/", "--")
+    needles = {model_name.lower(), normalized}
+
+    try:
+        for p in cache_root.rglob("*"):
+            name = p.name.lower()
+            if any(n in name for n in needles):
+                return True, cache_root
+    except Exception:
+        return False, cache_root
+
+    return False, cache_root
 
 
 def srt_timestamp(seconds: float) -> str:
@@ -565,7 +603,7 @@ def main() -> None:
 
     if not audio.exists():
         raise SystemExit(f"Error: file does not exist: {audio}")
-
+    
     print(f"File: {audio}")
     print(f"Subtitle style: {args.style}")
     print(
@@ -582,6 +620,12 @@ def main() -> None:
         print("Failed to read file duration. Progress bar will be based on segments.")
     
     set_language(args.language)
+
+    cached, cache_root = detect_model_cache(MODEL_NAME)
+    if cached:
+        stage(f"Model '{MODEL_NAME}' found in cache at: {cache_root}")
+    else:
+        stage(f"Model '{MODEL_NAME}' not found in cache. It will be downloaded to: {cache_root}")
 
     # Inicjalizacja modelu AI
     # Uwaga: Za pierwszym razem pobierze model z HuggingFace (ok. 1.5GB - 3GB)

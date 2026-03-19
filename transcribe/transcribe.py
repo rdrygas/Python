@@ -3,7 +3,7 @@
 #              Skrypt jest zoptymalizowany pod kątem czytelności napisów, dzieląc tekst na bloki z uwzględnieniem długości, czasu trwania i interpunkcji. 
 #              Pasek postępu tqdm pokazuje postęp transkrypcji w czasie rzeczywistym.
 #      AUTHOR: Robert Drygas / ChatGPT
-#     VERSION: 1.4.0
+#     VERSION: 1.4.1
 #     CREATED: 2026-03-14
 #    MODIFIED: 2026-03-19
 #
@@ -35,6 +35,7 @@
 #    - 1.2.1 (2026-03-18) Dodano obsługę przerwania klawiaturą (Ctrl+C) i poprawki w komunikatach o błędach
 #    - 1.3.0 (2026-03-19) Dodano komunikaty etapów wykonywania skryptu (funkcja stage)
 #    - 1.4.0 (2026-03-19) Dodano wykrywanie cache modelu i komunikaty o jego statusie
+#    - 1.4.1 (2026-03-19) Dodano sprawdzanie, czy wybrany model jest wspierany
 #
 # ROADMAP:
 #    - [*] Style napisów
@@ -111,6 +112,28 @@ STYLE_PRESETS = {
         min_block_duration=0.9,
         max_join_gap=0.55,
     ),
+}
+
+VALID_MODEL_NAMES = {
+    "tiny.en",
+    "tiny",
+    "base.en",
+    "base",
+    "small.en",
+    "small",
+    "medium.en",
+    "medium",
+    "large-v1",
+    "large-v2",
+    "large-v3",
+    "large",
+    "distil-large-v2",
+    "distil-medium.en",
+    "distil-small.en",
+    "distil-large-v3",
+    "distil-large-v3.5",
+    "large-v3-turbo",
+    "turbo",
 }
 
 @dataclass(slots=True)
@@ -595,8 +618,21 @@ def set_language(lang_code: str | None) -> str | None:
     return LANGUAGE
 
 
+def validate_model_name(model_name: str) -> str:
+    """Waliduje nazwę modelu faster-whisper względem listy wspieranych wartości."""
+    if model_name not in VALID_MODEL_NAMES:
+        allowed = ", ".join(sorted(VALID_MODEL_NAMES))
+        raise SystemExit(
+            "Error: invalid MODEL_NAME. "
+            f"Got '{model_name}'. Allowed values: {allowed}"
+        )
+    return model_name
+
+
 def main() -> None:
     """Główny punkt wejścia skryptu."""
+    validate_model_name(MODEL_NAME)
+
     args = parse_args()
     audio = args.audio_file.expanduser().resolve()
     preset = apply_style_preset(args.style)

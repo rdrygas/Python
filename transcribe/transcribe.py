@@ -3,7 +3,7 @@
 #              Skrypt jest zoptymalizowany pod kątem czytelności napisów, dzieląc tekst na bloki z uwzględnieniem długości, czasu trwania i interpunkcji. 
 #              Pasek postępu tqdm pokazuje postęp transkrypcji w czasie rzeczywistym.
 #      AUTHOR: Robert Drygas / ChatGPT
-#     VERSION: 1.4.1
+#     VERSION: 1.5.0
 #     CREATED: 2026-03-14
 #    MODIFIED: 2026-03-19
 #
@@ -13,12 +13,13 @@
 #    - OS Windows 11 + WSL2 (Ubuntu 24.04, Python 3.14) + GPU NVIDIA GeForce RTX 3060 + CPU Intel Core i7 11700
 #
 # USAGE:
-#    $ python3 transcribe.py <filename> [--style <style>] [--language <lang_code>]
+#    $ python3 transcribe.py <filename> [--style <style>] [--language <lang_code>] [--mux-mkv-srt]
 #
 # ARGUMENTS:
 #    <filename> - ścieżka do pliku audio lub wideo (obowiązkowe)
 #    --style    - styl napisów: 'reading' daje dłuższe, wygodniejsze bloki, a 'film' tworzy krótsze, bardziej klasyczne SRT (opcjonalne, domyślnie 'reading')
 #    --language - kod języka (ISO 639-1), np. 'pl' dla polskiego, 'en' dla angielskiego lub None dla automatycznej detekcji (opcjonalne, domyślnie 'pl')
+#    --mux-mkv-srt - dołącza wygenerowany plik SRT do nowego pliku MKV po wcześniejszej weryfikacji kontenera (opcjonalne)
 #
 # EXAMPLES:
 #    $ python3 transcribe.py nagranie.mp3
@@ -26,6 +27,7 @@
 #    $ python3 transcribe.py nagranie.mp4 --style film
 #    $ python3 transcribe.py nagranie.mp4 --language en
 #    $ python3 transcribe.py nagranie.mp4 --style film --language en
+#    $ python3 transcribe.py nagranie.mkv --mux-mkv-srt
 #
 # CHANGELOG:
 #    - 1.0.0 (2026-03-14) Pierwsza wersja
@@ -36,12 +38,13 @@
 #    - 1.3.0 (2026-03-19) Dodano komunikaty etapów wykonywania skryptu (funkcja stage)
 #    - 1.4.0 (2026-03-19) Dodano wykrywanie cache modelu i komunikaty o jego statusie
 #    - 1.4.1 (2026-03-19) Dodano sprawdzanie, czy wybrany model jest wspierany
+#    - 1.5.0 (2026-03-19) Dodano weryfikację MKV i opcję dołączania napisów SRT do nowego pliku MKV
 #
 # ROADMAP:
 #    - [*] Style napisów
 #    - [*] Komunikaty etapów wykonywania skryptu
 #    - [*] Wykrywanie cache modelu
-#    - [ ] Połączenie napisów z nagraniem wideo MKV
+#    - [*] Połączenie napisów z nagraniem wideo MKV
 #
 # KNOWN ISSUES:
 #
@@ -53,6 +56,8 @@ from __future__ import annotations
 import argparse
 import sys
 import os
+import shutil
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -62,7 +67,7 @@ from tqdm import tqdm
 
 
 # KONFIGURACJA MODELU
-MODEL_NAME = "large-v3"          # Wybór modelu: "turbo" (szybki), "large-v3" (dokładniejszy)
+MODEL_NAME = "turbo"          # Wybór modelu: "turbo" (szybki), "large-v3" (dokładniejszy)
 COMPUTE_TYPE = "float16"      # Typ obliczeń. Dla starszych kart lub CPU zmień na "int8_float16" lub "int8"
 LANGUAGE = "pl"               # Kod języka (ISO 639-1). None = automatyczna detekcja
 BEAM_SIZE = 5                 # Szerokość poszukiwania (wyższa = lepsza dokładność, ale wolniej)
@@ -136,6 +141,8 @@ VALID_MODEL_NAMES = {
     "large-v3-turbo",
     "turbo",
 }
+
+REQUIRED_VIDEO_TOOLS = ("ffprobe", "ffmpeg", "mkvmerge", "mkvinfo", "mediainfo")
 
 @dataclass(slots=True)
 class WordToken:
@@ -211,12 +218,198 @@ def parse_args() -> argparse.Namespace:
         default="pl",
         help="Language of the audio for transcription (ISO 639-1 code) or None for automatic detection (default: 'pl')."
     )
+    parser.add_argument(
+        "--mux-mkv-srt",
+        action="store_true",
+        help="If the input file is MKV, verify it with ffprobe/mkvinfo/mediainfo and attach the generated SRT subtitle track to a new MKV file.",
+    )
 
     return parser.parse_args()
 
 
 def stage(message: str) -> None:
     print(f"[STAGE] {message}", flush=True)
+
+
+def run_command(command: list[str]) -> subprocess.CompletedProcess[str]:
+    """Uruchamia polecenie systemowe i zwraca wynik wraz ze stdout/stderr jako tekst."""
+    return subprocess.run(command, capture_output=True, text=True, check=False)
+
+
+def get_available_media_tools() -> dict[str, str]:
+    """Zwraca mapę dostępnych narzędzi multimedialnych i ich ścieżek w systemie."""
+    available: dict[str, str] = {}
+    for tool_name in REQUIRED_VIDEO_TOOLS:
+        tool_path = shutil.which(tool_name)
+        if tool_path:
+            available[tool_name] = tool_path
+    return available
+
+
+def verify_required_media_tools() -> dict[str, str]:
+    """Sprawdza dostępność wymaganych narzędzi do weryfikacji i muxowania MKV."""
+    available = get_available_media_tools()
+    missing = [tool_name for tool_name in REQUIRED_VIDEO_TOOLS if tool_name not in available]
+    if missing:
+        raise SystemExit(
+            "Error: missing required media tools for MKV verification/muxing: "
+            + ", ".join(missing)
+        )
+    return available
+
+
+def is_mkv_extension(path: Path) -> bool:
+    """Sprawdza rozszerzenie pliku wejściowego."""
+    return path.suffix.lower() == ".mkv"
+
+
+def verify_mkv_with_ffprobe(video_path: Path, tools: dict[str, str]) -> None:
+    """Potwierdza kontener Matroska przy użyciu ffprobe."""
+    result = run_command(
+        [
+            tools["ffprobe"],
+            "-v",
+            "error",
+            "-show_entries",
+            "format=format_name",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            str(video_path),
+        ]
+    )
+    if result.returncode != 0:
+        raise SystemExit(f"Error: ffprobe failed to inspect '{video_path}': {result.stderr.strip()}")
+
+    format_name = result.stdout.strip().lower()
+    if "matroska" not in format_name:
+        raise SystemExit(
+            f"Error: ffprobe reports that '{video_path}' is not an MKV/Matroska container: {format_name or 'unknown'}"
+        )
+
+
+def verify_mkv_with_mkvinfo(video_path: Path, tools: dict[str, str]) -> None:
+    """Potwierdza, że mkvinfo potrafi odczytać strukturę kontenera Matroska."""
+    result = run_command([tools["mkvinfo"], str(video_path)])
+    if result.returncode != 0:
+        raise SystemExit(f"Error: mkvinfo failed to inspect '{video_path}': {result.stderr.strip()}")
+
+
+def verify_mkv_with_mediainfo(video_path: Path, tools: dict[str, str]) -> None:
+    """Potwierdza format kontenera przy użyciu mediainfo."""
+    result = run_command([tools["mediainfo"], "--Inform=General;%Format%", str(video_path)])
+    if result.returncode != 0:
+        raise SystemExit(f"Error: mediainfo failed to inspect '{video_path}': {result.stderr.strip()}")
+
+    reported_format = result.stdout.strip().lower()
+    if "matroska" not in reported_format:
+        raise SystemExit(
+            f"Error: mediainfo reports that '{video_path}' is not Matroska: {reported_format or 'unknown'}"
+        )
+
+
+def verify_mkv_video(video_path: Path, tools: dict[str, str]) -> None:
+    """Weryfikuje, czy plik jest rzeczywiście kontenerem MKV, używając kilku narzędzi."""
+    if not is_mkv_extension(video_path):
+        raise SystemExit(
+            f"Error: subtitle muxing is only supported for MKV input files. Got '{video_path.name}'."
+        )
+
+    verify_mkv_with_ffprobe(video_path, tools)
+    verify_mkv_with_mkvinfo(video_path, tools)
+    verify_mkv_with_mediainfo(video_path, tools)
+
+
+def build_muxed_mkv_path(video_path: Path) -> Path:
+    """Zwraca ścieżkę pliku wynikowego MKV z dołączonymi napisami."""
+    return video_path.with_name(f"{video_path.stem}.subtitled.mkv")
+
+
+def mux_subtitles_with_mkvmerge(
+    video_path: Path,
+    srt_path: Path,
+    output_path: Path,
+    language: str | None,
+    tools: dict[str, str],
+) -> subprocess.CompletedProcess[str]:
+    """Dołącza plik SRT do MKV za pomocą mkvmerge bez rekompresji strumieni."""
+    subtitle_language = language or "und"
+    return run_command(
+        [
+            tools["mkvmerge"],
+            "-o",
+            str(output_path),
+            str(video_path),
+            "--language",
+            f"0:{subtitle_language}",
+            "--track-name",
+            "0:Transcription",
+            str(srt_path),
+        ]
+    )
+
+
+def mux_subtitles_with_ffmpeg(
+    video_path: Path,
+    srt_path: Path,
+    output_path: Path,
+    language: str | None,
+    tools: dict[str, str],
+) -> subprocess.CompletedProcess[str]:
+    """Fallback: dołącza plik SRT do MKV przy użyciu ffmpeg."""
+    subtitle_language = language or "und"
+    return run_command(
+        [
+            tools["ffmpeg"],
+            "-y",
+            "-i",
+            str(video_path),
+            "-i",
+            str(srt_path),
+            "-map",
+            "0",
+            "-map",
+            "1:0",
+            "-c",
+            "copy",
+            "-c:s",
+            "srt",
+            "-metadata:s:s:0",
+            f"language={subtitle_language}",
+            "-metadata:s:s:0",
+            "title=Transcription",
+            str(output_path),
+        ]
+    )
+
+
+def mux_srt_with_mkv(video_path: Path, srt_path: Path, language: str | None) -> Path:
+    """Weryfikuje MKV i dołącza do niego wygenerowane napisy SRT."""
+    tools = verify_required_media_tools()
+    verify_mkv_video(video_path, tools)
+
+    output_path = build_muxed_mkv_path(video_path)
+
+    stage("Attaching SRT subtitles to MKV with mkvmerge")
+    mkvmerge_result = mux_subtitles_with_mkvmerge(video_path, srt_path, output_path, language, tools)
+    if mkvmerge_result.returncode == 0:
+        return output_path
+
+    if output_path.exists():
+        output_path.unlink()
+
+    stage("mkvmerge failed, retrying subtitle attachment with ffmpeg")
+    ffmpeg_result = mux_subtitles_with_ffmpeg(video_path, srt_path, output_path, language, tools)
+    if ffmpeg_result.returncode == 0:
+        return output_path
+
+    if output_path.exists():
+        output_path.unlink()
+
+    raise SystemExit(
+        "Error: failed to attach SRT subtitles to MKV. "
+        f"mkvmerge: {mkvmerge_result.stderr.strip() or mkvmerge_result.stdout.strip()} | "
+        f"ffmpeg: {ffmpeg_result.stderr.strip() or ffmpeg_result.stdout.strip()}"
+    )
 
 
 def get_hf_cache_root() -> Path:
@@ -643,6 +836,7 @@ def main() -> None:
     
     print(f"File: {audio}")
     print(f"Subtitle style: {args.style}")
+    print(f"Mux SRT into MKV: {'yes' if args.mux_mkv_srt else 'no'}")
     print(
         "Style parameters: "
         f"max_line_length={preset.max_line_length}, "
@@ -713,6 +907,10 @@ def main() -> None:
     print(f"Number of merged subtitles: {len(subtitle_blocks)}")
     print(f"TXT: {txt_path}")
     print(f"SRT: {srt_path}")
+
+    if args.mux_mkv_srt:
+        muxed_path = mux_srt_with_mkv(audio, srt_path, LANGUAGE)
+        print(f"MKV with subtitles: {muxed_path}")
 
 
 if __name__ == "__main__":

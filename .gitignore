@@ -212,3 +212,9 @@ __marimo__/
 chat.litcoffee
 chat.pl.litcoffee
 rca/
+*.xml
+*.zip
+*.gz
+*.bz2
+*.xz
+

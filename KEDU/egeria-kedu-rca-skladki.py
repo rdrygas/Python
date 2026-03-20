@@ -327,5 +327,5 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\nInterrupted by user. Transcription stopped.", file=sys.stderr)
+        print("\nInterrupted by user.", file=sys.stderr)
         raise SystemExit(130)

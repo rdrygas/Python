@@ -39,6 +39,7 @@
 #    - 1.4.0 (2026-03-19) Dodano wykrywanie cache modelu i komunikaty o jego statusie
 #    - 1.4.1 (2026-03-19) Dodano sprawdzanie, czy wybrany model jest wspierany
 #    - 1.5.0 (2026-03-19) Dodano weryfikację MKV i opcję dołączania napisów SRT do nowego pliku MKV
+#    - 1.6.0 (2026-03-20) Dodano weryfikację CUDA i informację o dostępności GPU/CPU dla modelu
 #
 # ROADMAP:
 #    - [*] Style napisów
@@ -62,12 +63,18 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import av
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+
 from faster_whisper import WhisperModel
 from tqdm import tqdm
 
 
 # KONFIGURACJA MODELU
-MODEL_NAME = "turbo"          # Wybór modelu: "turbo" (szybki), "large-v3" (dokładniejszy)
+MODEL_NAME = "large-v3"          # Wybór modelu: "turbo" (szybki), "large-v3" (dokładniejszy)
 COMPUTE_TYPE = "float16"      # Typ obliczeń. Dla starszych kart lub CPU zmień na "int8_float16" lub "int8"
 LANGUAGE = "pl"               # Kod języka (ISO 639-1). None = automatyczna detekcja
 BEAM_SIZE = 5                 # Szerokość poszukiwania (wyższa = lepsza dokładność, ale wolniej)
@@ -823,6 +830,27 @@ def validate_model_name(model_name: str) -> str:
     return model_name
 
 
+def get_device() -> str:
+    """Determines the best device to use: 'cuda' if available, otherwise 'cpu'."""
+    if not TORCH_AVAILABLE:
+        print("[WARNING] PyTorch not found. Using CPU for transcription (this will be slow).")
+        return "cpu"
+    
+    if not torch.cuda.is_available():
+        print("[WARNING] CUDA is not available. Using CPU for transcription (this will be slow).")
+        return "cpu"
+    
+    try:
+        # Try to allocate a small tensor on CUDA to verify it actually works
+        test_tensor = torch.zeros(1, device="cuda")
+        del test_tensor
+        print(f"[INFO] CUDA is available and working. Using GPU: {torch.cuda.get_device_name(0)}")
+        return "cuda"
+    except Exception as e:
+        print(f"[WARNING] CUDA is available but failed to initialize: {e}. Falling back to CPU.")
+        return "cpu"
+
+
 def main() -> None:
     """Główny punkt wejścia skryptu."""
     validate_model_name(MODEL_NAME)
@@ -861,7 +889,8 @@ def main() -> None:
     # Inicjalizacja modelu AI
     # Uwaga: Za pierwszym razem pobierze model z HuggingFace (ok. 1.5GB - 3GB)
     stage("Loading Whisper model")
-    model = WhisperModel(MODEL_NAME, device="cuda", compute_type=COMPUTE_TYPE)
+    device = get_device()
+    model = WhisperModel(MODEL_NAME, device=device, compute_type=COMPUTE_TYPE)
     stage("Whisper model loaded")
 
     # Uruchomienie transkrypcji (generator)

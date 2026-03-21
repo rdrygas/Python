@@ -874,7 +874,12 @@ def main() -> None:
     
     total_duration = get_media_duration_seconds(audio)
     if total_duration:
-        print(f"File duration: {total_duration:.1f} s")
+        hours, remainder = divmod(total_duration, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        if hours > 0:
+            print(f"File duration: {int(hours)}h {int(minutes)}m {int(seconds)}s")
+        else:
+            print(f"File duration: {int(minutes)}m {int(seconds)}s")
     else:
         print("Failed to read file duration. Progress bar will be based on segments.")
     

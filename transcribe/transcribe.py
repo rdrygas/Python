@@ -3,9 +3,9 @@
 #              Skrypt jest zoptymalizowany pod kątem czytelności napisów, dzieląc tekst na bloki z uwzględnieniem długości, czasu trwania i interpunkcji. 
 #              Pasek postępu tqdm pokazuje postęp transkrypcji w czasie rzeczywistym.
 #      AUTHOR: Robert Drygas / ChatGPT
-#     VERSION: 1.5.0
+#     VERSION: 1.6.0
 #     CREATED: 2026-03-14
-#    MODIFIED: 2026-03-19
+#    MODIFIED: 2026-03-21
 #
 # DEPENDENCIES:
 #
@@ -39,7 +39,7 @@
 #    - 1.4.0 (2026-03-19) Dodano wykrywanie cache modelu i komunikaty o jego statusie
 #    - 1.4.1 (2026-03-19) Dodano sprawdzanie, czy wybrany model jest wspierany
 #    - 1.5.0 (2026-03-19) Dodano weryfikację MKV i opcję dołączania napisów SRT do nowego pliku MKV
-#    - 1.6.0 (2026-03-20) Dodano weryfikację CUDA i informację o dostępności GPU/CPU dla modelu
+#    - 1.6.0 (2026-03-21) Dodano weryfikację CUDA i informację o dostępności GPU/CPU dla modelu
 #
 # ROADMAP:
 #    - [*] Style napisów
